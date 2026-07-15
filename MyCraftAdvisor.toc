@@ -1,9 +1,10 @@
 ## Interface: 30300
 ## Title: MyCraftAdvisor
-## Notes: Автоматический расчет выгоды крафта на основе цен Auctionator.
-## Version: 1.0
+## Notes: Расчёт выгоды крафта с интеграцией ARL (все рецепты профессии).
+## Version: 2.0
 ## Author: Твое Имя
 ## SavedVariables: MyDynamicCraftDB, MyDynamicVendorDB
 ## Dependencies: Auctionator
+## OptionalDeps: AckisRecipeList
 
 MyCraftAdvisor.lua
