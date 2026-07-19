@@ -464,7 +464,9 @@ function MCA_GUI:RenderMyRecipes(profName)
 
         row.badge:SetText("|cff00ff88[+] Знаю|r")
 
-        row.text:SetText(link)
+        local bagCount = GetItemCount(item.id)
+        local countText = bagCount > 0 and (" |cff00ff00(" .. bagCount .. " в сумке)|r") or ""
+        row.text:SetText(link .. countText)
         row.costText:SetText("|cff999999Крафт:|r " .. FormatMoney(item.craftCost))
         if item.profit == nil then
             row.profit:SetText("|cffff8800Нет данных АХ|r")
@@ -571,8 +573,10 @@ function MCA_GUI:RenderARLRecipes(profName)
             row.badge:SetText("|cffff5555[-] Нет|r")
         end
 
-        -- Название + уровень скила
-        row.text:SetText(link .. " |cff666666[" .. item.skill_level .. "]|r")
+        -- Название + уровень скила + рюкзак
+        local bagCount = item.item_id and GetItemCount(item.item_id) or 0
+        local countText = bagCount > 0 and (" |cff00ff00(" .. bagCount .. " в сумке)|r") or ""
+        row.text:SetText(link .. " |cff666666[" .. item.skill_level .. "]|r" .. countText)
 
         -- Себестоимость (если рецепт есть в нашей БД)
         if item.item_id and MyDynamicCraftDB[item.item_id] then
@@ -817,9 +821,11 @@ function MCA_GUI:DrawNodeGraph(rootItemId, fromScan)
         local vPrice = MyDynamicVendorDB[node.id] and FormatMoney(MyDynamicVendorDB[node.id]) or "—"
         local ahStr  = node.ah and FormatMoney(node.ah) or "—"
         local crStr  = node.craft and FormatMoney(node.craft) or "—"
+        local bagCount = GetItemCount(node.id)
+        local countText = bagCount > 0 and ("\n|cff00ff00В сумке: " .. bagCount .. "|r") or ""
         local pStr = string.format(
-            "|cff00dd66АХ: %s|r\n|cff00ddffВенд: %s|r\n|cffffaa00Крафт: %s|r\n|cffffffffМин: %s|r",
-            ahStr, vPrice, crStr, FormatMoney(node.cost)
+            "|cff00dd66АХ: %s|r\n|cff00ddffВенд: %s|r\n|cffffaa00Крафт: %s|r\n|cffffffffМин: %s|r%s",
+            ahStr, vPrice, crStr, FormatMoney(node.cost), countText
         )
         uiNode.prices:SetText(pStr)
 
