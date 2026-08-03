@@ -305,6 +305,85 @@ local contentFrame = CreateFrame("Frame", nil, scrollFrame)
 contentFrame:SetSize(2000, 2000)
 scrollFrame:SetScrollChild(contentFrame)
 
+-- Добавляем невидимый фон для надежного захвата мыши при перетаскивании холста
+local contentBg = contentFrame:CreateTexture(nil, "BACKGROUND")
+contentBg:SetAllPoints(contentFrame)
+contentBg:SetTexture(0, 0, 0, 0.01)
+
+-- Реализация перемещения холста (pan/drag) мышкой
+contentFrame:EnableMouse(true)
+contentFrame:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then
+        self.isDragging = true
+        local x, y = GetCursorPosition()
+        local scale = self:GetEffectiveScale()
+        if scale and scale > 0 then
+            self.startX = x / scale
+            self.startY = y / scale
+            self.startH = scrollFrame:GetHorizontalScroll()
+            self.startV = scrollFrame:GetVerticalScroll()
+        end
+    end
+end)
+contentFrame:SetScript("OnMouseUp", function(self, button)
+    if button == "LeftButton" then
+        self.isDragging = false
+    end
+end)
+contentFrame:SetScript("OnUpdate", function(self, elapsed)
+    if self.isDragging then
+        if not IsMouseButtonDown("LeftButton") then
+            self.isDragging = false
+            return
+        end
+        local x, y = GetCursorPosition()
+        local scale = self:GetEffectiveScale()
+        if scale and scale > 0 then
+            local currX = x / scale
+            local currY = y / scale
+            local diffX = currX - self.startX
+            local diffY = currY - self.startY
+            
+            local newH = self.startH - diffX
+            local newV = self.startV + diffY
+            
+            local maxH = scrollFrame:GetHorizontalScrollRange()
+            local maxV = scrollFrame:GetVerticalScrollRange()
+            
+            if newH < 0 then newH = 0 elseif newH > maxH then newH = maxH end
+            if newV < 0 then newV = 0 elseif newV > maxV then newV = maxV end
+            
+            scrollFrame:SetHorizontalScroll(newH)
+            scrollFrame:SetVerticalScroll(newV)
+            
+            local scrollbar = _G[scrollFrame:GetName() .. "ScrollBar"]
+            if scrollbar then
+                scrollbar:SetValue(newV)
+            end
+        end
+    end
+end)
+
+-- Поддержка прокрутки колесиком мыши (с Shift — по горизонтали)
+scrollFrame:EnableMouseWheel(true)
+scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+    if IsShiftKeyDown() then
+        local newH = self:GetHorizontalScroll() - (delta * 40)
+        local maxH = self:GetHorizontalScrollRange()
+        if newH < 0 then newH = 0 elseif newH > maxH then newH = maxH end
+        self:SetHorizontalScroll(newH)
+    else
+        local scrollbar = _G[self:GetName() .. "ScrollBar"]
+        if scrollbar then
+            local current = scrollbar:GetValue()
+            local min, max = scrollbar:GetMinMaxValues()
+            local newV = current - (delta * 40)
+            if newV < min then newV = min elseif newV > max then newV = max end
+            scrollbar:SetValue(newV)
+        end
+    end
+end)
+
 local rowPool, nodePool, linePool, tabPool = {}, {}, {}, {}
 local currentViewMode     = "none"
 local currentSelectedProf = ""
@@ -314,6 +393,14 @@ local function ResetUI()
     for _, n in ipairs(nodePool) do n:Hide() end
     for _, l in ipairs(linePool) do l:Hide() end
     statusText:SetText("")
+    if scrollFrame then
+        scrollFrame:SetHorizontalScroll(0)
+        scrollFrame:SetVerticalScroll(0)
+        local scrollbar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        if scrollbar then
+            scrollbar:SetValue(0)
+        end
+    end
 end
 
 local function HideTabs()
@@ -784,6 +871,7 @@ function MCA_GUI:DrawNodeGraph(rootItemId, fromScan)
     local treeRoot = BuildNode(rootItemId, 0)
 
     local currentY = -60
+    local maxX = 0
     local function LayoutY(node)
         if #node.children == 0 then
             node.y = currentY
@@ -793,6 +881,7 @@ function MCA_GUI:DrawNodeGraph(rootItemId, fromScan)
             node.y = (node.children[1].y + node.children[#node.children].y) / 2
         end
         node.x = 30 + (node.depth * 195)
+        if node.x > maxX then maxX = node.x end
     end
     LayoutY(treeRoot)
 
@@ -839,11 +928,13 @@ function MCA_GUI:DrawNodeGraph(rootItemId, fromScan)
     end
 
     RenderNode(treeRoot, nil)
-    contentFrame:SetSize(treeRoot.x + 450, math.abs(currentY) + 100)
+    local canvasWidth = math.max(maxX + 250, 800)
+    local canvasHeight = math.max(math.abs(currentY) + 100, 480)
+    contentFrame:SetSize(canvasWidth, canvasHeight)
     statusText:SetText(
         "|cffff9f44Граф крафта.|r  " ..
         "|cff00dd66■|r Крафт  |cff00ddff■|r Вендор  |cff00ff88■|r АХ  " ..
-        "|cff888888Клик → раскрыть узел, Shift → поиск на АХ|r"
+        "|cff888888Зажмите ЛКМ для перемещения · Shift+Колесо для гор. прокрутки|r"
     )
     MCA_GUI:Show()
 end
