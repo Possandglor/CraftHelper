@@ -267,6 +267,22 @@ local filterToggleBtn = CreateFrame("Button", "MCA_FilterToggle", MCA_GUI, "UIPa
 filterToggleBtn:SetSize(170, 22)
 filterToggleBtn:SetPoint("TOPRIGHT", MCA_GUI, "TOPRIGHT", -44, -82)
 
+-- Поиск по названию рецепта
+local searchQuery = ""
+
+local searchBox = CreateFrame("EditBox", "MCA_SearchBox", MCA_GUI, "InputBoxTemplate")
+searchBox:SetSize(180, 22)
+searchBox:SetPoint("TOPRIGHT", MCA_GUI, "TOPRIGHT", -44, -110)
+searchBox:SetAutoFocus(false)
+searchBox:SetMaxLetters(64)
+searchBox:SetText("")
+
+-- Placeholder-текст (WoW 3.3.5 не имеет SetPlaceholderText)
+local searchPlaceholder = searchBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+searchPlaceholder:SetPoint("LEFT", searchBox, "LEFT", 6, 0)
+searchPlaceholder:SetText("Поиск...")
+searchPlaceholder:SetTextColor(0.5, 0.5, 0.5)
+
 local function UpdateFilterToggleText()
     if MCA_FilterKnown then
         filterToggleBtn:SetText("[Мои] Только мои рецепты")
@@ -274,6 +290,37 @@ local function UpdateFilterToggleText()
         filterToggleBtn:SetText("[Все] Все рецепты (ARL)")
     end
 end
+
+local function UpdateSearch()
+    searchQuery = searchBox:GetText():lower()
+    -- Показываем/скрываем placeholder
+    if searchBox:GetText() == "" then
+        searchPlaceholder:Show()
+    else
+        searchPlaceholder:Hide()
+    end
+    if currentViewMode == "scan_all" then
+        MCA_GUI:RenderMyRecipes(currentSelectedProf)
+    elseif currentViewMode == "arl_all" then
+        MCA_GUI:RenderARLRecipes(currentSelectedProf)
+    else
+        MCA_GUI:ShowAllProfessions()
+    end
+end
+
+searchBox:SetScript("OnEnterPressed", function(self)
+    self:ClearFocus()
+    UpdateSearch()
+end)
+searchBox:SetScript("OnTextChanged", function(self, userInput)
+    if not userInput then return end
+    UpdateSearch()
+end)
+searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus(); UpdateSearch(); end)
+searchBox:SetScript("OnEditFocusGained", function(self) searchPlaceholder:Hide() end)
+searchBox:SetScript("OnEditFocusLost", function(self)
+    if self:GetText() == "" then searchPlaceholder:Show() end
+end)
 UpdateFilterToggleText()
 
 -- Разделительная линия: ниже второй строки кнопок
@@ -520,12 +567,14 @@ function MCA_GUI:RenderMyRecipes(profName)
     local list = {}
     for itemId, data in pairs(MyDynamicCraftDB) do
         if data.profession == profName then
-            priceCache = {}
-            -- craftCost = реальная стоимость материалов (не зависит от АХ-цены самого предмета)
-            local craftCost = CalculateCraftCost(itemId)
-            local ah        = GetItemBasePrice(itemId)
-            local profit    = (ah and craftCost) and (ah - craftCost) or nil
-            table.insert(list, { id = itemId, craftCost = craftCost, ah = ah, profit = profit })
+            local name = SafeGetItemInfo(itemId)
+            if searchQuery == "" or (name and name:lower():find(searchQuery, 1, true)) then
+                priceCache = {}
+                local craftCost = CalculateCraftCost(itemId)
+                local ah        = GetItemBasePrice(itemId)
+                local profit    = (ah and craftCost) and (ah - craftCost) or nil
+                table.insert(list, { id = itemId, craftCost = craftCost, ah = ah, profit = profit })
+            end
         end
     end
     -- nil-безопасная сортировка: без цены — в конец
@@ -589,29 +638,27 @@ function MCA_GUI:RenderARLRecipes(profName)
         if data.profession == profName then
             local isKnown = IsSpellKnown(spell_id)
             local itemId  = data.item_id
-            local craftCost, ah, profit = nil, nil, nil
-
-            if itemId and MyDynamicCraftDB[itemId] then
-                priceCache = {}
-                -- craftCost = реальная стоимость материалов (см. выше)
-                craftCost = CalculateCraftCost(itemId)
-                ah        = GetItemBasePrice(itemId)
-                profit    = (ah and craftCost) and (ah - craftCost) or nil
+            local name = data.name
+            if searchQuery == "" or (name and name:lower():find(searchQuery, 1, true)) then
+                local craftCost, ah, profit = nil, nil, nil
+                if itemId and MyDynamicCraftDB[itemId] then
+                    priceCache = {}
+                    craftCost = CalculateCraftCost(itemId)
+                    ah        = GetItemBasePrice(itemId)
+                    profit    = (ah and craftCost) and (ah - craftCost) or nil
+                end
+                table.insert(list, {
+                    spell_id    = spell_id,
+                    item_id     = itemId,
+                    name        = name,
+                    skill_level = data.skill_level,
+                    is_known    = isKnown,
+                    craftCost   = craftCost,
+                    ah          = ah,
+                    profit      = profit,
+                })
+                if isKnown then knownCount = knownCount + 1 else unknownCount = unknownCount + 1 end
             end
-
-            table.insert(list, {
-                spell_id    = spell_id,
-                item_id     = itemId,
-                name        = data.name,
-                skill_level = data.skill_level,
-                is_known    = isKnown,
-                craftCost   = craftCost,
-                ah          = ah,
-                profit      = profit,
-            })
-
-            if isKnown then knownCount = knownCount + 1
-            else unknownCount = unknownCount + 1 end
         end
     end
 
